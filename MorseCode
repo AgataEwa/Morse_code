@@ -1,0 +1,220 @@
+//application for training of morse code
+//customizable values:
+//line 12 dot - change length of a dot at will
+//line 17 wordArr - add/remove/change words for training in array
+
+let start = 0 //for measuring the starting time of operations
+let end = 0 //for measuring the finishing time of operations
+let duration = 0 //for measuring the duration between pressed and released and vice versa
+let started = 0 //state indicator to determine whether the user input has started or not
+let points = 0 //scored points = amount of dots and dashes in correct words
+let rand = 0 //random number to choose a random element of the string array wordArr
+let errors = 0 //for counting errors
+let errorMade = false //to indicate whether an error was made in the current word
+
+let deadline = 90000 //total duration of one game 90 sec
+let dot = 1000 //duration of one dot in ms
+let f1 = 0.6 //factor for lower bound of accepted duration
+let f2 = 1.4 //factor for upper bound of accepted duration
+let first = 1 // to calculate the first dot length 
+
+let wordArr = ["morse", "start", "sos", "42"]
+
+//map of morse code to string
+//1 is the duration of one dot, and 3 is the duration of one dash
+//actual duration in ms given by this factor times variable dot in the bounds between f1 and f2
+interface Morse {
+    [key: string]: Array<any>;
+}
+const morse = {
+    a: [1, 3],
+    b: [3, 1, 1, 1],
+    c: [3, 1, 3, 1],
+    d: [3, 1, 1],
+    e: [1],
+    f: [1, 1, 3, 1],
+    g: [3, 3, 1],
+    h: [1, 1, 1, 1],
+    i: [1, 1],
+    j: [1, 3, 3, 3],
+    k: [3, 1, 3, 1],
+    l: [1, 3, 1, 1],
+    m: [3, 3],
+    n: [3, 1],
+    o: [3, 3, 3],
+    p: [1, 3, 3, 1],
+    q: [3, 3, 1, 3],
+    r: [1, 3, 1],
+    s: [1, 1, 1],
+    t: [3],
+    u: [1, 1, 3],
+    v: [1, 1, 1, 3],
+    w: [1, 3, 3],
+    x: [3, 1, 1, 3],
+    y: [3, 1, 3, 3],
+    z: [3, 3, 1, 1],
+    1: [1, 3, 3, 3, 3],
+    2: [1, 1, 3, 3, 3],
+    3: [1, 1, 1, 3, 3],
+    4: [1, 1, 1, 1, 3],
+    5: [1, 1, 1, 1, 1],
+    6: [3, 1, 1, 1, 1],
+    7: [3, 3, 1, 1, 1],
+    8: [3, 3, 3, 1, 1],
+    9: [3, 3, 3, 3, 1],
+    0: [3, 3, 3, 3, 3]
+}
+let i = 0, j = 0, k = 0 //counting variables
+let word_morse = [0] //array of numbers representing string converted to morse code
+function dotDash(word: string, morse: Morse) {
+    for (i = 0; i < word.length; i++) {
+        for (j = 0; j < morse[word[i]].length; j++) {
+            //adds the durations of signals from the morse array
+            //and interleaves them with short pauses (value -1)
+            word_morse[k] = morse[word[i]][j]
+            word_morse[k + 1] = -1
+            k += 2
+        }
+        //adds long pauses between letters in morse code
+        word_morse[k - 1] = -3
+    }
+}
+
+basic.forever(function () {
+    //program chooses random string from the array wordArr
+    //and saves the morse code version in word_morse by calling dotDash()
+    rand = Math.randomRange(0, wordArr.length - 1)
+    dotDash(wordArr[rand], morse)
+    //basic.showNumber(word_morse[1]) //testing line for correctness of dotDash()
+    basic.showString(wordArr[rand])
+    //after string was shown one can begin pressing button A to achieve the correct morse sequence
+    if (errors < 3) {
+        checkInput()
+    } else {
+        //if one accumulates 3 errors, the game is over
+        gameOver()
+    }
+
+})
+
+function checkInput() {
+    //checks whether input is correct, uses current word in morsecode as reference
+
+    i = 0 //reset i to zero
+
+    //define variables for determining the signal and pause durations
+    let press = 0 //time when button was last pressed
+    let release = 0 //time when button was last released
+    let signal = 0 //duration of last signal or pause
+
+    while (!input.buttonIsPressed(Button.A)) {
+        //wait for button A to be pressed
+    }
+    press = input.runningTime() //registers time when button A was pressed
+    start = press //compute starting time to track total duration
+
+
+    //as soon as the button A is pressed, the program begins checking the input
+    while (i < word_morse.length) {
+        if (input.buttonIsPressed(Button.A)) {
+            while (input.buttonIsPressed(Button.A)) {
+                //wait
+                addTime()
+                if (duration >= deadline) {
+                    //adds number of done dots and dashes of current word to score
+                    points += Math.trunc(i / 2)
+                    timeout()
+                    i = word_morse.length
+                    break
+                }
+            }
+            release = input.runningTime()
+            signal = release - press
+            if (first) {
+                if (word_morse[0] == 1) {
+                    dot = signal
+                } else if (word_morse[0] == 3) {
+                    dot = Math.trunc(signal / 3)
+                }
+                first = 0
+            }
+            //set time when released and compute total time when button was pressed
+            //basic.showNumber(duration) //to test whether duration is measured with a sufficiently small latency
+            if (signal > f1 * dot * word_morse[i] && signal < f2 * dot * word_morse[i]) {
+                //checks whether the button was pressed too long or too short
+                basic.showString("Y")
+            } else {
+                error()
+                i = word_morse.length
+                break
+            }
+            i++
+        } else {
+            while (!input.buttonIsPressed(Button.A)) {
+                //wait
+                addTime()
+                if (duration >= deadline) {
+                    //adds number of done dots and dashes of current word to score
+                    points += Math.trunc(i / 2)
+                    timeout()
+                    i = word_morse.length
+                    break
+                }
+            }
+            press = input.runningTime()
+            signal = press - release
+
+            if (signal > 0.6 * dot * (-word_morse[i]) && signal < 1.4 * dot * (-word_morse[i])) {
+                //checks whether the button was pressed too long or too short
+                basic.showString("Y")
+            } else {
+                error()
+                i = word_morse.length
+                break
+            }
+            i++
+        }
+    }
+    addTime()
+    if (!errorMade) {
+        points += Math.trunc(word_morse.length - 1) / 2
+    } else {
+        errorMade = false
+    }
+}
+
+function error() {
+    end = input.runningTime()
+    basic.showString("X") //to indicate that a faulty input was made
+    errors += 1 //increase error counter by one
+    duration += start - end //time is counted nevertheless
+    errorMade = true
+}
+
+function gameOver() {
+    basic.showString("Game over :( Your score: ")
+    basic.showNumber(points)
+    //reset values for a new game
+    errors = 0
+    duration = 0
+    points = 0
+    first = 1
+}
+
+function addTime() {
+    end = input.runningTime()
+    duration += end - start
+    start = end
+}
+
+function timeout() {
+    //adds number of done dots and dashes of current word to score
+    //points += Math.trunc(i / 2)
+    basic.showString("Time's up! Final score: ")
+    basic.showNumber(points)
+    //reset values for a new game
+    errors = 0
+    duration = 0
+    points = 0
+    first = 1
+}
